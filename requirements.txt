@@ -5,3 +5,4 @@ wikipediaapi
 plotly
 matplotlib
 scipy
+TA-lib (https://medium.com/@mkstz/install-ta-lib-without-homebrew-61f57a63c06d) #how to install it

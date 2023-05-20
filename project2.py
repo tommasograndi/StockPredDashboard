@@ -6,10 +6,14 @@ import yfinance as yf
 import numpy as np
 from scipy.optimize import minimize
 import matplotlib.pyplot as plt
-from yahoo_fin.stock_info  import get_data, get_live_price, get_stats, tickers_nasdaq, tickers_sp500, tickers_dow, get_analysts_info
+from yahoo_fin.stock_info  import get_live_price, get_stats, get_analysts_info
 
-import streamlit as st
-import yfinance as yf
+from ta.trend import SMAIndicator, EMAIndicator
+from ta.momentum import RSIIndicator
+import plotly.express as px
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
+
 
 
 ### Define functions
@@ -48,9 +52,9 @@ def ptf_optimization(stocks, commodities, start, short):
 
     return results['x'] #return an array with weights of the ptf
 
-def get_STOCK_DATA(stock, year):
+def get_STOCK_DATA(stock, start, end):
 
-    data = get_data(stock, start_date = year) #using the get_data function I am getting the data from Yahoo finance
+    data = yf.download(stock, start, end) #getting data from Yahoo finance
     data.index.name = 'date'  #setting index name as date
     data.reset_index(inplace=True)  #when resetting the index, the old index with dates is added as a column in the dataframe
     data['date'] = data['date'].dt.date  #fixing the new date column format 
@@ -61,6 +65,17 @@ def get_STOCK_DATA(stock, year):
     an_info = get_analysts_info(stock) #returns a dictionary with analyst estimates
 
     return data, live_price, stats, an_info
+
+def apply_indicator(indicator, data, window):
+    if indicator == 'Simple moving average':
+        sma = SMAIndicator(data['Close'], window).sma_indicator()
+        return pd.DataFrame({"Close" : data['Close'], "SMA" : sma}), False
+    elif indicator == 'Exponential moving average':
+        ema = EMAIndicator(data['Close'], window).ema_indicator()
+        return pd.DataFrame({"Close" : data['Close'], "EMA" : ema}), False
+    elif indicator == 'Relative strength index':
+        rsi = RSIIndicator(data['Close']).rsi()
+        return pd.DataFrame({"Close" : data['Close'], "RSI" : rsi}), True
 
 
 ### Initialise S&P500, Nasdaq, Dow-Jones, FTSEMIB list of companies and  and Commodities 
@@ -88,41 +103,85 @@ ticks_NASDAQ = dict(zip(NASDAQ['Company'], NASDAQ['Ticker']))
 ### Config page layout
 st.set_page_config(page_icon = "", layout="wide", initial_sidebar_state="auto", menu_items=None)
 st.title("Stock analysis, price prediction and portfolio optimization Dashboard")
-st.subheader("")
+st.header("")
 
 ### First row 
-with st.form(key='my_form'):
-    col1, col2, col3 = st.columns(3)    #form avoid to re-run the script automatically everytime the user change an input value. 
-         
-    with col1:
-        market = st.selectbox("Which market index are you interested in?", ('S&P500', 'NASDAQ', 'FTSEMIB', 'Commodities', "Indexes' composites") )
-        st.write('You selected:', market)
-        if market == 'NASDAQ':
-            tickers = ticks_NASDAQ #return and assign all the companies listed in the nasdaq
-        elif market == 'FTSEMIB':
-            tickers = ticks_FTSE #companies listed in the dowjones
-        elif market == 'S&P500':
-            tickers = ticks_SP500 #companies listed in the sp500
-        elif market == 'Commodities':
-            tickers = commodities
-        else:
-            tickers = index_composites
-
-    with col2:
-        name = st.selectbox('Which stock are you interested in?', list(tickers.keys()))  
-        choice = tickers[name]
-        st.write('You selected:', choice)
-
-    with col3:
-        #select the starting year
-        year = st.text_input('Select the starting year:', '2000')
-        st.write('The current selected starting year is', year)
-
-    submit_button = st.form_submit_button(label='Submit')  #defining the SUBMIT BUTTON AFTER THE THREE SELECTBOXES
+col1, col2, col3 = st.columns(3)    #form avoid to re-run the script automatically everytime the user change an input value. 
         
-if submit_button: #if submit button is pressed, the rest of the script can be executed (only the first time)
+with col1:
+    market = st.selectbox("Which market index are you interested in?", ('S&P500', 'NASDAQ', 'FTSEMIB', 'Commodities', "Indexes' composites") )
+    st.write('You selected:', market)
+    if market == 'NASDAQ':
+        tickers = ticks_NASDAQ #return and assign all the companies listed in the nasdaq
+    elif market == 'FTSEMIB':
+        tickers = ticks_FTSE #companies listed in the dowjones
+    elif market == 'S&P500':
+        tickers = ticks_SP500 #companies listed in the sp500
+    elif market == 'Commodities':
+        tickers = commodities
+    else:
+        tickers = index_composites
     
-    stock_data, stock_live_price, stats, analyst_info = get_STOCK_DATA(choice, year)
+with col2:
+    name = st.selectbox('Which stock are you interested in?', list(tickers.keys()))  
+    choice = tickers[name]
+    st.write('You selected:', choice)
+
+with col3:
+    date = st.text_input('Select the starting year:', '2000-01-01')
+    st.write('The current selected starting date is', date)
+
+
+###
+st.caption("")
+st.header(f"{name} ({choice})")
+st.caption("")
+
+### Second row
+stock_data = yf.download(choice, start=date)
+
+indicators = ['Simple moving average', 'Exponential moving average', 'Relative strength index']
+    
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["Chart", "Technical analysis", "Prediction", "Statistics", "Analysts estimates"])
+st.caption("")
+
+with tab1:
+    fig1 = px.line(stock_data['Close'])  #define a plotly lineplot for the timeseries of the stockprice
+    fig1.update_xaxes(nticks = 20) #set the number of ticks for the x axis
+    fig1.update_layout(height = 600) #change the container height
+    st.plotly_chart(fig1, use_container_width = True)
 
     st.caption("")
     st.write(stock_data) 
+
+with tab2:
+    
+    st.caption("")
+    indicator = st.selectbox('Select a technical indicator (only for Moving Averages)', indicators)
+    window = st.slider('Select a time window in days', value = 30)
+
+    ind_data, if_rsi = apply_indicator(indicator, stock_data, window)
+
+    if if_rsi:
+        fig2 = make_subplots(rows=2, cols=1, vertical_spacing=0.065, shared_xaxes=True)
+        fig2.add_trace(
+            go.Scatter(x=ind_data.index, y=ind_data['Close'], name = 'Close price'),
+            row=1, col=1
+        )
+        fig2.add_trace(
+            go.Scatter(x=ind_data.index, y=ind_data['RSI'], name = 'RSI'),
+            row=2, col=1
+        )
+        fig2.update_layout(height = 600)
+        st.plotly_chart(fig2, use_container_width=True)
+    else:
+        fig2 = px.line(ind_data)
+        fig2.update_xaxes(nticks = 20) #set the number of ticks for the x axis
+        fig2.update_layout(height = 600) #change the container height
+        st.plotly_chart(fig2, use_container_width=True)
+        
+        
+
+
+
+
