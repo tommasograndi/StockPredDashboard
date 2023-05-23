@@ -52,12 +52,9 @@ def ptf_optimization(stocks, commodities, start, short):
 
     return results['x'] #return an array with weights of the ptf
 
-def get_STOCK_DATA(stock, start, end):
+def get_STOCK_DATA(stock, start_date):
 
-    data = yf.download(stock, start, end) #getting data from Yahoo finance
-    data.index.name = 'date'  #setting index name as date
-    data.reset_index(inplace=True)  #when resetting the index, the old index with dates is added as a column in the dataframe
-    data['date'] = data['date'].dt.date  #fixing the new date column format 
+    data = yf.download(stock, start = start_date) #getting data from Yahoo finance
 
     live_price = get_live_price(stock) #getting the live price
 
@@ -91,6 +88,7 @@ FTSEMIB = FTSEMIB[1]
 NASDAQ = pd.read_html('https://en.wikipedia.org/wiki/Nasdaq-100#Components')
 NASDAQ = NASDAQ[4]
 
+#Create a dictionary containing the company name and its ticker
 ticks_SP500 = dict(zip(SP500['Security'], SP500['Symbol']))
 ticks_FTSE = dict(zip(FTSEMIB['Company'], FTSEMIB['Ticker']))
 ticks_NASDAQ = dict(zip(NASDAQ['Company'], NASDAQ['Ticker']))
@@ -132,10 +130,16 @@ with col3:
     st.write('The current selected starting date is', date)
 
 
-###
-st.caption("")
-st.header(f"{name} ({choice})")
-st.caption("")
+### CREATE THE SECOND ROW, containing live stock price.
+col21, col22 = st.columns([3,10]) 
+with col21:
+    st.caption("") 
+    st.header(f"{name} ({choice})")
+    st.caption("")
+with col22:
+    #Creating a live price display in the page. 
+    st.caption("")   
+    st.metric(label = choice + " live stock price", value = "%.2f$" % get_live_price(choice))
 
 ### Second row
 stock_data = yf.download(choice, start=date)
@@ -160,10 +164,12 @@ with tab2:
     indicator = st.selectbox('Select a technical indicator (only for Moving Averages)', indicators)
     window = st.slider('Select a time window in days', value = 30)
 
-    ind_data, if_rsi = apply_indicator(indicator, stock_data, window)
+    ind_data, if_rsi = apply_indicator(indicator, stock_data, window) #using apply indicator function we'll get the technical indicator data
 
-    if if_rsi:
-        fig2 = make_subplots(rows=2, cols=1, vertical_spacing=0.065, shared_xaxes=True)
+    if if_rsi: # when the indicator is RSI we'll plot Close price and RSI in separate plots
+        fig2 = make_subplots(rows=2, cols=1, vertical_spacing=0.065, shared_xaxes=True) #we want two subplots in the same figure
+        #by setting shared axis True plotly will allow us to interact with one plot but see che changes also in the other
+
         fig2.add_trace(
             go.Scatter(x=ind_data.index, y=ind_data['Close'], name = 'Close price'),
             row=1, col=1
@@ -172,12 +178,15 @@ with tab2:
             go.Scatter(x=ind_data.index, y=ind_data['RSI'], name = 'RSI'),
             row=2, col=1
         )
-        fig2.update_layout(height = 600)
-        st.plotly_chart(fig2, use_container_width=True)
-    else:
+        fig2['layout']['yaxis']['title']='Close price'
+        fig2['layout']['yaxis2']['title']='RSI percentage'
+        fig2.update_layout(height = 600) #update height to improve the readability
+        st.plotly_chart(fig2, use_container_width=True) # this is the streamlit command to plot a plotly object
+    else: 
         fig2 = px.line(ind_data)
         fig2.update_xaxes(nticks = 20) #set the number of ticks for the x axis
-        fig2.update_layout(height = 600) #change the container height
+        fig2.update_layout(height = 600) 
+        fig2.update_layout(yaxis_title='Close price')
         st.plotly_chart(fig2, use_container_width=True)
         
         
