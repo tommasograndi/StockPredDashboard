@@ -7,12 +7,14 @@ import numpy as np
 from scipy.optimize import minimize
 import matplotlib.pyplot as plt
 from yahoo_fin.stock_info  import get_live_price, get_stats, get_analysts_info
-
 from ta.trend import SMAIndicator, EMAIndicator
 from ta.momentum import RSIIndicator
 import plotly.express as px
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
+import pandas_market_calendars as mcal  
+from datetime import datetime, timedelta
+import pmdarima as pm
 
 
 
@@ -52,16 +54,46 @@ def ptf_optimization(stocks, commodities, start, short):
 
     return results['x'] #return an array with weights of the ptf
 
+def ARIMA_forecast(data, forecast_period):    
+
+    model_autoARIMA = pm.auto_arima(data['Close'], start_p=0, start_q=0,
+                      test='adf',       # use adftest to find optimal 'd'
+                      max_p=3, max_q=3, # maximum p and q
+                      m=1,              # frequency of series
+                      d=None,           # let model determine 'd'
+                      seasonal=False,   # No Seasonality
+                      start_P=0, 
+                      D=0, 
+                      trace=True,
+                      error_action='ignore',  
+                      suppress_warnings=True, 
+                      stepwise=True)
+    summary = model_autoARIMA.summary()
+
+    parameters = model_autoARIMA.get_params()['order']
+    parameters = {'p, number of Autoregressive terms': parameters[0], 
+                    'd, difference order': parameters[1], 
+                    'q, number of Moving Average terms' : parameters[2]}
+
+    predicted, confint = model_autoARIMA.predict(n_periods=forecast_period, return_conf_int=True)
+
+    # Calculate the dates of the days in for the forecasted period (market year)
+    today = datetime.today() #get today's date
+    end_period = (today + timedelta(days=forecast_period)).strftime('%Y-%m-%d') 
+    market_year = mcal.get_calendar('Financial_Markets_US') #using get_calendar we obtain the yearly calendar for US markets
+    cal = market_year.schedule(start_date=today.strftime('%Y-%m-%d'), end_date=end_period) #now we oobtain the full schedule
+    #And finally convert the schedule into a daterange that will be the dateindex of our forecasted series.
+    forecast_dates = mcal.date_range(cal, frequency='1D') 
+
+    return forecast_dates, confint, predicted, parameters, summary
+
 def get_STOCK_DATA(stock, start_date):
 
     data = yf.download(stock, start = start_date) #getting data from Yahoo finance
-
-    live_price = get_live_price(stock) #getting the live price
-
     stats = get_stats(stock)  #more statistics to be included in the dashboard
     an_info = get_analysts_info(stock) #returns a dictionary with analyst estimates
 
-    return data, live_price, stats, an_info
+    return data, stats, an_info
 
 def apply_indicator(indicator, data, window):
     if indicator == 'Simple moving average':
@@ -107,7 +139,7 @@ st.header("")
 col1, col2, col3 = st.columns(3)    #form avoid to re-run the script automatically everytime the user change an input value. 
         
 with col1:
-    market = st.selectbox("Which market index are you interested in?", ('S&P500', 'NASDAQ', 'FTSEMIB', 'Commodities', "Indexes' composites") )
+    market = st.selectbox("Which market index are you interested in?", ('S&P500', 'NASDAQ', 'FTSEMIB', "Indexes' composites") )
     st.write('You selected:', market)
     if market == 'NASDAQ':
         tickers = ticks_NASDAQ #return and assign all the companies listed in the nasdaq
@@ -115,8 +147,6 @@ with col1:
         tickers = ticks_FTSE #companies listed in the dowjones
     elif market == 'S&P500':
         tickers = ticks_SP500 #companies listed in the sp500
-    elif market == 'Commodities':
-        tickers = commodities
     else:
         tickers = index_composites
     
@@ -142,7 +172,7 @@ with col22:
     st.metric(label = choice + " live stock price", value = "%.2f$" % get_live_price(choice))
 
 ### Second row
-stock_data = yf.download(choice, start=date)
+stock_data, stats, analyst_info = get_STOCK_DATA(choice, start_date=date)
 
 indicators = ['Simple moving average', 'Exponential moving average', 'Relative strength index']
     
@@ -161,8 +191,8 @@ with tab1:
 with tab2:
     
     st.caption("")
-    indicator = st.selectbox('Select a technical indicator (only for Moving Averages)', indicators)
-    window = st.slider('Select a time window in days', value = 30)
+    indicator = st.selectbox('Select a technical indicator', indicators)
+    window = st.slider('Select a time window in days (only for Moving Averages)', value = 30)
 
     ind_data, if_rsi = apply_indicator(indicator, stock_data, window) #using apply indicator function we'll get the technical indicator data
 
@@ -188,9 +218,80 @@ with tab2:
         fig2.update_layout(height = 600) 
         fig2.update_layout(yaxis_title='Close price')
         st.plotly_chart(fig2, use_container_width=True)
-        
-        
+
+# Forecasting using ARIMA and XGBOOST models    
+with tab3:
+    
+    with st.expander('ARIMA Model'):
+            
+            # Addign a columns only for display purposes
+            colAR1, colAR2 = st.columns([3,10]) 
+            with colAR1:
+                st.caption("") 
+                future = st.slider('Select the time-horizon to perform the forecast (days)', 
+                               value = 100, 
+                               max_value=1000,
+                               help='Remember that the longer the horizon, the more unreliable will be the forecast ')
+            with colAR2:
+                st.caption("")   
+
+            # Recall the ARIMA_forecast function to obtain the predictions and the output of the model
+            forecast_dates, confint, predicted, parameters, ARIMAsummary = ARIMA_forecast(stock_data, future)
+
+            # Create a chart to display the prediction
+            fig3 = go.Figure([go.Scatter( #add the Upper Bound of the confidence interval
+                x=forecast_dates, 
+                y=confint[:,1], 
+                marker=dict(color="lightgrey"),
+                name = 'Upper bound CI',
+                showlegend=False
+                ),
+                go.Scatter( #add the lower Bound of the confidence interval
+                x=forecast_dates, # x, then x reversed
+                y=confint[:,0], # upper, then lower reversed
+                marker=dict(color="lightgrey"),
+                mode='lines',
+                fillcolor='rgba(68, 68, 68, 0.3)', #color to fill in the area
+                fill='tonexty', #type of filling
+                name = 'Upper bound CI',
+                showlegend=False
+                ), 
+                go.Scatter( #add the Prediction
+                    x=forecast_dates, y=predicted, line=dict(color='orange'),
+                    mode='lines', name='Prediction')
+            ])
+            fig3.add_trace(go.Scatter(x=stock_data.index, y=stock_data['Close'], name='Original series', line=dict(color='blue'))) #This is the original series
+            fig3.update_layout(
+                title=f"Price prediction for {choice}", 
+                yaxis_title="Price ($)", 
+            )
+            fig3.update_layout(height = 600)
+            fig3.update_xaxes(nticks = 25)
+            st.plotly_chart(fig3, use_container_width=True)
+
+            st.subheader(f'ARIMA({list(parameters.values())[0]},{list(parameters.values())[1]},{list(parameters.values())[2]})')
+            st.write(parameters)
+    
+            st.text(ARIMAsummary)
 
 
+    with st.expander('XGBOOST prediction'):
+            st.write()
 
+with tab4:
+     st.caption("")
+     st.write(stats, use_container_width = True)
 
+with tab5:
+     st.caption('')
+     with st.expander('EPS Trend'):
+         st.write(analyst_info['EPS Trend'])
+
+     with st.expander('Earnings estimate'):
+         st.write(analyst_info['Earnings Estimate'])
+
+     with st.expander('Growth estimate'):
+         st.write(analyst_info['Growth Estimates'].dropna('columns'))
+
+     with st.expander('Revenue estimate'):
+         st.write(analyst_info['Revenue Estimate'])
