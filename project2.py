@@ -15,6 +15,7 @@ import plotly.graph_objects as go
 import pandas_market_calendars as mcal  
 from datetime import datetime, timedelta
 import pmdarima as pm
+import xgboost as xgb
 
 
 
@@ -54,6 +55,9 @@ def ptf_optimization(stocks, commodities, start, short):
 
     return results['x'] #return an array with weights of the ptf
 
+### FUNCTION FOR THE PRICE PREDICTION
+
+# 1) ARIMA FUNCTION
 def ARIMA_forecast(data, forecast_period):    
 
     model_autoARIMA = pm.auto_arima(data['Close'], start_p=0, start_q=0,
@@ -86,6 +90,99 @@ def ARIMA_forecast(data, forecast_period):
     forecast_dates = mcal.date_range(cal, frequency='1D') 
 
     return forecast_dates, confint, predicted, parameters, summary
+# END OF ARIMA
+
+# 2) XGBOOST FUNCTION
+def XGBOOST_forecast(data, forecast_period):  
+
+    df = data.iloc[:-3, 3:4]
+
+    ### Create set of features
+
+    df['Past_Ret'] = np.log(df['Close']/df['Close'].shift(1))
+    df['Diff_1'] = df['Close'].diff()
+    df['Diff_2'] = df['Close'].diff().diff()
+    df['Future_ret'] = df['Past_Ret'].shift(-1)
+
+    df['dayofweek'] = df.index.dayofweek
+    df['quarter'] = df.index.quarter
+    df['month'] = df.index.month
+    df['year'] = df.index.year
+    df['dayofyear'] = df.index.dayofyear
+    df['dayofmonth'] = df.index.day
+    df['weekofyear'] = df.index.isocalendar().week.astype(int)
+
+    df.dropna(inplace=True)
+
+    ### Train/test split  
+    test_idx  = int(df.shape[0] * (1-0.1)) #index for the test set
+    train_df  = df.iloc[:test_idx+1, :].copy()
+    test_df   = df.iloc[test_idx:, :].copy()
+
+    #Split target and features 
+    xs = list(range(0,4)) + list(range(5, 12))
+
+    y_train = train_df['Future_ret'].copy()
+    X_train = train_df.iloc[:, xs].copy()
+
+    y_test  = test_df['Future_ret'].copy()
+    X_test  = test_df.iloc[:, xs].copy()
+
+    ### Perform XGBOOST
+    model = xgb.XGBRegressor(base_score=0.5, booster='gbtree',    
+                        n_estimators=1000,
+                        early_stopping_rounds=50,
+                        objective='reg:linear',
+                        max_depth=3,
+                        learning_rate=0.01)
+    model.fit(X_train, y_train,
+            eval_set=[(X_train, y_train), (X_test, y_test)],
+            verbose=100)
+            
+    # Calculate the dates of the days in for the forecasted period (market year)
+    today = X_test.index[-1] #get last day of the training set
+    end_period = (today + timedelta(days=forecast_period)).strftime('%Y-%m-%d') 
+    market_year = mcal.get_calendar('Financial_Markets_US') #using get_calendar we obtain the yearly calendar for US markets
+    cal = market_year.schedule(start_date=today.strftime('%Y-%m-%d'), end_date=end_period) #now we obtain the full schedule
+    #And finally convert the schedule into a daterange that will be the dateindex of our forecasted series.
+    forecast_dates = mcal.date_range(cal, frequency='1D') 
+    
+    ###
+    X_oos = X_test.iloc[-2:-1, :] #pick last observation from the test sample
+    pred_oos = model.predict(X_oos.iloc[0:1, :])  #predict first return
+
+    dayofweek= forecast_dates.dayofweek
+    quarter = forecast_dates.quarter
+    month = forecast_dates.month
+    year = forecast_dates.year
+    dayofyear = forecast_dates.dayofyear
+    day = forecast_dates.day
+    weekofyear = forecast_dates.isocalendar().week.astype(int)
+
+    
+    for i in range(1, len(dayofweek)):
+        
+        X_oos.loc[i] = [
+                (X_oos.iloc[i-1, 0]) * (1+pred_oos[i-1]), # Close price
+                pred_oos[i-1], #Returns (predicted)
+                ((X_oos.iloc[i-1, 0]) * (1+pred_oos[i-1])) - (X_oos.iloc[i-1, 0]), #first order difference
+                (((X_oos.iloc[i-1, 0]) * (1+pred_oos[i-1])) - (X_oos.iloc[i-1, 0])) - X_oos.iloc[i-1, 2],#second order difference
+                dayofweek[i], #take same daysofweek as X_test
+                quarter[i], #take same quarter as X_test
+                month[i], #take same month as X_test
+                year[i], #take same year as X_test
+                dayofyear[i], #take same dayofyear as X_test
+                day[i], #take same dayofmonth as X_test
+                weekofyear[i] #take same weekofyear as X_test
+        ]
+        # Now predict the actual return based on the set of features inserted above. And append it to the array containing the first prediction.
+        pred_oos = np.append(pred_oos, [model.predict(X_oos.iloc[i:(i+1), :])])
+
+
+    X_oos.set_index(forecast_dates, inplace=True) 
+    
+    return X_oos, train_df, test_df
+# end XGBOOST
 
 def get_STOCK_DATA(stock, start_date):
 
@@ -125,7 +222,6 @@ ticks_SP500 = dict(zip(SP500['Security'], SP500['Symbol']))
 ticks_FTSE = dict(zip(FTSEMIB['Company'], FTSEMIB['Ticker']))
 ticks_NASDAQ = dict(zip(NASDAQ['Company'], NASDAQ['Ticker']))
 ###
-
 
 
 ###### Streamlit page configuration
@@ -277,6 +373,29 @@ with tab3:
 
     with st.expander('XGBOOST prediction'):
             st.write()
+
+            #Create a slider box to select the time period
+            colXG1, colXG2 = st.columns([3,10]) 
+            with colXG1:
+                st.caption("") 
+                futureXG = st.slider('Select the time-horizon to perform the forecast (days)', 
+                               value = 300, 
+                               max_value=1000,
+                               help='Remember that the longer the horizon, the more unreliable will be the forecast ')
+            with colXG2:
+                st.caption("") 
+            
+            pred, train_df, test_df = XGBOOST_forecast(stock_data, futureXG)
+
+            # Display the prediction
+            fig4 = go.Figure()
+            fig4.add_trace(go.Scatter(x=train_df.index, y=train_df['Close'], name='Train'))
+            fig4.add_trace(go.Scatter(x=test_df.index, y=test_df['Close'], name='Test'))
+            fig4.add_trace(go.Scatter(x=pred.index,  y=pred['Close'],  name='Out of sample prediction'))
+            fig4.update_layout(height = 600)
+            fig4.update_xaxes(nticks = 25)
+            st.plotly_chart(fig4, use_container_width=True)
+
 
 with tab4:
      st.caption("")
