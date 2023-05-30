@@ -83,6 +83,7 @@ def ARIMA_forecast(data, forecast_period):
 
     # Calculate the dates of the days in for the forecasted period (market year)
     today = datetime.today() #get today's date
+    today = data.index[-1] #get last day 
     end_period = (today + timedelta(days=forecast_period)).strftime('%Y-%m-%d') 
     market_year = mcal.get_calendar('Financial_Markets_US') #using get_calendar we obtain the yearly calendar for US markets
     cal = market_year.schedule(start_date=today.strftime('%Y-%m-%d'), end_date=end_period) #now we oobtain the full schedule
@@ -95,7 +96,7 @@ def ARIMA_forecast(data, forecast_period):
 # 2) XGBOOST FUNCTION
 def XGBOOST_forecast(data, forecast_period):  
 
-    df = data.iloc[:-3, 3:4]
+    df = data.iloc[:, 3:4]
 
     ### Create set of features
 
@@ -133,14 +134,15 @@ def XGBOOST_forecast(data, forecast_period):
                         n_estimators=1000,
                         early_stopping_rounds=50,
                         objective='reg:linear',
-                        max_depth=3,
-                        learning_rate=0.01)
+                        max_depth=5,
+                        learning_rate=0.01,
+                        gamma=0.001)
     model.fit(X_train, y_train,
             eval_set=[(X_train, y_train), (X_test, y_test)],
             verbose=100)
             
     # Calculate the dates of the days in for the forecasted period (market year)
-    today = X_test.index[-1] #get last day of the training set
+    today = X_test.index[-1] #get last day of the test set
     end_period = (today + timedelta(days=forecast_period)).strftime('%Y-%m-%d') 
     market_year = mcal.get_calendar('Financial_Markets_US') #using get_calendar we obtain the yearly calendar for US markets
     cal = market_year.schedule(start_date=today.strftime('%Y-%m-%d'), end_date=end_period) #now we obtain the full schedule
@@ -326,7 +328,7 @@ with tab3:
                 st.caption("") 
                 future = st.slider('Select the time-horizon to perform the forecast (days)', 
                                value = 100, 
-                               max_value=1000,
+                               max_value=500,
                                help='Remember that the longer the horizon, the more unreliable will be the forecast ')
             with colAR2:
                 st.caption("")   
@@ -371,7 +373,7 @@ with tab3:
             st.text(ARIMAsummary)
 
 
-    with st.expander('XGBOOST prediction'):
+    with st.expander('XGBOOST Model'):
             st.write()
 
             #Create a slider box to select the time period
@@ -379,8 +381,8 @@ with tab3:
             with colXG1:
                 st.caption("") 
                 futureXG = st.slider('Select the time-horizon to perform the forecast (days)', 
-                               value = 300, 
-                               max_value=1000,
+                               value = 100, 
+                               max_value=600,
                                help='Remember that the longer the horizon, the more unreliable will be the forecast ')
             with colXG2:
                 st.caption("") 
