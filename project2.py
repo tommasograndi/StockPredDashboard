@@ -306,6 +306,16 @@ with tab2:
             go.Scatter(x=ind_data.index, y=ind_data['RSI'], name = 'RSI'),
             row=2, col=1
         )
+        fig2.add_hline(
+            y=70,
+            line_dash="dash",
+            row=2, col=1
+        )
+        fig2.add_hline(
+            y=30,
+            line_dash="dash",
+            row=2, col=1
+        )
         fig2['layout']['yaxis']['title']='Close price'
         fig2['layout']['yaxis2']['title']='RSI percentage'
         fig2.update_layout(height = 600) #update height to improve the readability
