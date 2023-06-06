@@ -4,7 +4,6 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 import numpy as np
-from scipy.optimize import minimize
 import matplotlib.pyplot as plt
 from yahoo_fin.stock_info  import get_live_price, get_stats, get_analysts_info
 from ta.trend import SMAIndicator, EMAIndicator
@@ -20,42 +19,6 @@ import xgboost as xgb
 
 
 ### Define functions
-
-#Create a function to minimize, to find the portfolio with the highest sharpe Ratio, the highest risk-adjusted return
-def sharpe_ptf(W, returns):
-    
-    ptf_risk = W.dot(returns.cov()).dot(W) ** 0.5 
-    #calculating the portfolio risk, the portfolio standard deviation. 
-
-    #calculating the sharpe ratio for the portfolio
-    SR = W.dot(returns.mean()) / ptf_risk
-
-    return -SR  #return negative value of the sharpe ratio in order to minimize it. 
-
-def ptf_optimization(stocks, commodities, start, short):
-
-    assets = stocks + commodities
-    tickers = assets
-    df = yf.download(tickers, start = start)['Adj Close']
-
-    ret_df = np.log(df/df.shift(1)) #calculate log returns for the selected assets
-    
-    # initial guess: all portfolios with equal weights
-    weights = np.ones(len(ret_df.columns))/np.ones(len(ret_df.columns)).sum()
-
-    if short:
-        const = ({'type' : 'eq', 'fun' : lambda x: np.sum(x) - 1})
-        #now minimize
-        results = minimize(sharpe_ptf, weights, ret_df, constraints = const)  
-    else:
-        # Optimization with positive weights (just long, no short positions)
-        const_pos = [{'type' : 'eq', 'fun' : lambda x: np.sum(x) - 1}, 
-                    {'type' : 'ineq', 'fun' : lambda x: np.min(x)}]
-        results = minimize(sharpe_ptf, weights, ret_df, constraints = const_pos)
-
-    return results['x'] #return an array with weights of the ptf
-
-### FUNCTION FOR THE PRICE PREDICTION
 
 # 1) ARIMA FUNCTION
 def ARIMA_forecast(data, forecast_period):    
