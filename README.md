@@ -27,8 +27,6 @@
  and wait for the browser to open a new page. <br> <br> <br>
  
  ### Dashboard previews and main functionalities
- 
- ![Screen Recording 2023-06-06 at 16 36 49](https://github.com/tommasograndi/StockPredOptDashboard/assets/118896276/102fb96b-0d3b-46f9-ad90-4cecbfc968cc)
 
  
  
