@@ -27,6 +27,9 @@
  
  ### Dashboard previews and main functionalities
  
+ <img width="1560" alt="Screenshot 2023-06-09 at 16 23 27" src="https://github.com/tommasograndi/StockPredDashboard/assets/118896276/0cf70f0d-6c00-4ea5-aade-217c309fbcf7">
+ <br> <br>
+ 
  The dashboard is organized in the following way: 
 
 1. **User input** <br>
@@ -48,15 +51,23 @@ After the user has interacted with the input boxes, the script will execute the 
      <img width="1595" alt="image" src="https://github.com/tommasograndi/StockPredOptDashboard/assets/118896276/4fcc5632-706b-4979-93ee-b200963e353a">
    <br>
 
-   - *Prediction*. This is the most important tab of the dashboard, the one with the two models studied and created according to the process explained in the `report.ipynb` notebook.  As we know, the two models are ARIMA and XGBOOST. 
-     
+   - *Prediction*. This is the most important tab of the dashboard, the one with the two models studied and created according to the process explained in the `report.ipynb` notebook.  As we know, the two models are ARIMA and XGBOOST. <br>
+   *ARIMA:*
+   <img width="1548" alt="image" src="https://github.com/tommasograndi/StockPredDashboard/assets/118896276/ee6442b1-a71d-4b21-a9c3-59f8e3e480f6">
+   <br>
+   
+   *XGBOOST:*
+   <img width="1547" alt="image" src="https://github.com/tommasograndi/StockPredDashboard/assets/118896276/83082536-9ddb-4f6c-b94c-2ae28fc32b6c">
+
    <br>
 
    - *Statistics*. This tab simply display some statistics of the stock scrape with `yahoo_fin` package from Yahoo Finance. 
-     <img width="552" alt="image" src="https://github.com/tommasograndi/StockPredOptDashboard/assets/118896276/67e806a2-de85-499a-ab1a-bc8d77f8cbbf">
+     <img width="496" alt="image" src="https://github.com/tommasograndi/StockPredDashboard/assets/118896276/2da50081-c51f-4ae5-bb10-45260d87115c">
      <br>
 
    - *Analysts' estimates*. As the previous tab, this one is printing analysts predictions and forecast for the company main figures. The informations are obtained through a `yahoo_fin` function. 
+     <img width="679" alt="image" src="https://github.com/tommasograndi/StockPredDashboard/assets/118896276/45c85a8b-8bdc-4445-b5d3-20e28818e470">
+
    
 
 
