@@ -59,15 +59,26 @@ def ARIMA_forecast(data, forecast_period):
 # 2) XGBOOST FUNCTION
 def XGBOOST_forecast(data, forecast_period):  
 
+    # Get only the Close price
     df = data.iloc[:, 3:4]
 
     ### Create set of features
 
     df['Past_Ret'] = np.log(df['Close']/df['Close'].shift(1))
+    df['Future_ret'] = df['Past_Ret'].shift(-1)
     df['Diff_1'] = df['Close'].diff()
     df['Diff_2'] = df['Close'].diff().diff()
-    df['Future_ret'] = df['Past_Ret'].shift(-1)
+    df['MA5']= df['Close'].rolling(window=5).mean()
+    df['MA50']= df['Close'].rolling(window=50).mean()
 
+    # ADD LAGS (3)
+    for i in range(1, 4):
+        df[f'lag{i}'] = df['Close'].shift(i)
+
+    # Drop past returns (not needed for prediction)
+    df.drop(axis=1, labels='Past_Ret', inplace=True)
+
+    # Add calendar features
     df['dayofweek'] = df.index.dayofweek
     df['quarter'] = df.index.quarter
     df['month'] = df.index.month
@@ -76,6 +87,7 @@ def XGBOOST_forecast(data, forecast_period):
     df['dayofmonth'] = df.index.day
     df['weekofyear'] = df.index.isocalendar().week.astype(int)
 
+    # Drop observations with NaN
     df.dropna(inplace=True)
 
     ### Train/test split  
@@ -84,7 +96,7 @@ def XGBOOST_forecast(data, forecast_period):
     test_df   = df.iloc[test_idx:, :].copy()
 
     #Split target and features 
-    xs = list(range(0,4)) + list(range(5, 12))
+    xs = list(list([0]) + list(range(2, 16)))
 
     y_train = train_df['Future_ret'].copy()
     X_train = train_df.iloc[:, xs].copy()
@@ -93,29 +105,27 @@ def XGBOOST_forecast(data, forecast_period):
     X_test  = test_df.iloc[:, xs].copy()
 
     ### Perform XGBOOST
-    model = xgb.XGBRegressor(base_score=0.5, booster='gbtree',    
-                        n_estimators=1000,
+    model = xgb.XGBRegressor(booster='gbtree',    
+                        n_estimators=400,
                         early_stopping_rounds=50,
-                        objective='reg:linear',
-                        max_depth=5,
+                        objective='reg:squarederror',
+                        max_depth=10,
                         learning_rate=0.01,
-                        gamma=0.001)
+                        gamma=0.001
+                        )
     model.fit(X_train, y_train,
-            eval_set=[(X_train, y_train), (X_test, y_test)],
-            verbose=100)
-            
-    # Calculate the dates of the days in for the forecasted period (market year)
-    today = X_test.index[-1] #get last day of the test set
-    end_period = (today + timedelta(days=forecast_period)).strftime('%Y-%m-%d') 
-    market_year = mcal.get_calendar('Financial_Markets_US') #using get_calendar we obtain the yearly calendar for US markets
-    cal = market_year.schedule(start_date=today.strftime('%Y-%m-%d'), end_date=end_period) #now we obtain the full schedule
-    #And finally convert the schedule into a daterange that will be the dateindex of our forecasted series.
-    forecast_dates = mcal.date_range(cal, frequency='1D') 
+        eval_set=[(X_train, y_train), (X_test, y_test)],
+        verbose=100)
     
-    ###
-    X_oos = X_test.iloc[-2:-1, :] #pick last observation from the test sample
-    pred_oos = model.predict(X_oos.iloc[0:1, :])  #predict first return
+    # Calculate the dates of the days for the forecasted period (market calendar)
+    today = X_test.index[-1] #get last day of the training set
+    end_period = (today + timedelta(days=forecast_period)).strftime('%Y-%m-%d')  #shift to the end period by 300 days
+    market_year = mcal.get_calendar('Financial_Markets_US') #using get_calendar we obtain the yearly calendar for US markets
+    cal = market_year.schedule(start_date=today.strftime('%Y-%m-%d'), end_date=end_period) #now we oobtain the full schedule
+    #And finally convert the schedule into a daterange that will be the dateindex of our forecasted series.
+    forecast_dates = mcal.date_range(cal, frequency='1D')
 
+    # Get future calendar features
     dayofweek= forecast_dates.dayofweek
     quarter = forecast_dates.quarter
     month = forecast_dates.month
@@ -123,28 +133,59 @@ def XGBOOST_forecast(data, forecast_period):
     dayofyear = forecast_dates.dayofyear
     day = forecast_dates.day
     weekofyear = forecast_dates.isocalendar().week.astype(int)
-
     
-    for i in range(1, len(dayofweek)):
+    ### OUT OF SAMPLE forecasting
+    X_oos = X_test.iloc[-51:, :] #pick last 50 observation from the test sample (we need them for moving averages)
+    # Predict the first return. 
+    pred_oos = model.predict(X_oos.iloc[-1:, :]) 
+
+    # Joint last 50 observation dates of test set with future dates (determined by forecast period) 
+    combined = X_oos.index.union(forecast_dates[1:])
+
+
+    for i in range(1, len(forecast_dates)):
+
+        print(i)
+
+        close = (X_oos.iloc[i-1, 0]) * (1+pred_oos[i-1]) # Close price
+
+        ## Loc will insert a new row of features (for a specific day) at the bottom of the dataframe
+        #Create new row with only close in order to calculate MA
+        X_oos.loc[i] = [close, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         
+        # calculate MAverages (that we'll insert now)
+        MA5 = X_oos.iloc[:, 0].rolling(window=5).mean()
+        MA50 = X_oos.iloc[:, 0].rolling(window=50).mean()
+
+        # Now subscript the row with all features
         X_oos.loc[i] = [
-                (X_oos.iloc[i-1, 0]) * (1+pred_oos[i-1]), # Close price
-                pred_oos[i-1], #Returns (predicted)
-                ((X_oos.iloc[i-1, 0]) * (1+pred_oos[i-1])) - (X_oos.iloc[i-1, 0]), #first order difference
-                (((X_oos.iloc[i-1, 0]) * (1+pred_oos[i-1])) - (X_oos.iloc[i-1, 0])) - X_oos.iloc[i-1, 2],#second order difference
-                dayofweek[i], #take same daysofweek as X_test
-                quarter[i], #take same quarter as X_test
-                month[i], #take same month as X_test
-                year[i], #take same year as X_test
-                dayofyear[i], #take same dayofyear as X_test
-                day[i], #take same dayofmonth as X_test
-                weekofyear[i] #take same weekofyear as X_test
+            close, # Close price
+            # pred_oos[i-1], #Returns (predicted)
+            close - (X_oos.iloc[i-1, 0]), #first order difference
+            (close - (X_oos.iloc[i-1, 0])) - X_oos.iloc[i-1, 1],#second order difference
+            MA5[i],
+            MA50[i],
+            X_oos.iloc[i-1, 0], #lag1
+            X_oos.iloc[i-2, 0], #lag2
+            X_oos.iloc[i-3, 0], #lag3
+            int(dayofweek[i]), #take same daysofweek as X_test
+            int(quarter[i]), #take same quarter as X_test
+            int(month[i]), #take same month as X_test
+            int(year[i]), #take same year as X_test
+            int(dayofyear[i]), #take same dayofyear as X_test
+            int(day[i]), #take same dayofmonth as X_test
+            int(weekofyear[i]) #take same weekofyear as X_test
         ]
+
         # Now predict the actual return based on the set of features inserted above. And append it to the array containing the first prediction.
         pred_oos = np.append(pred_oos, [model.predict(X_oos.iloc[i:(i+1), :])])
+        # This new prediction will be used in the following ITERATION to calculate the Close price at time t
 
+    # After running the whole loop, this will update the dataframe index with the dates calendar obtained before.
+    X_oos.set_index(combined, inplace=True)        
 
-    X_oos.set_index(forecast_dates, inplace=True) 
+    # And now subset only the predictions from today
+    X_oos = X_oos[today:]
     
     return X_oos, train_df, test_df
 # end XGBOOST
@@ -169,9 +210,7 @@ def apply_indicator(indicator, data, window):
         return pd.DataFrame({"Close" : data['Close'], "RSI" : rsi}), True
 
 
-### Initialise S&P500, Nasdaq, Dow-Jones, FTSEMIB list of companies and  and Commodities 
-# Set the tickers for important commodities futures that can be traded
-commodities = {'Gold' : 'GC=F', 'Oil' : 'CL=F', 'Natural gas' : 'NG=F', 'Silver' : 'SI=F', 'Wheat' : 'KE=F'}
+### Initialise S&P500, Nasdaq, Dow-Jones, FTSEMIB list of companies
 index_composites = {'SP500' : '^GSPC', 'FTSEMIB' : 'FTSEMIB.MI', 'NASDAQ' : '^IXIC'}
 
 # Get tickers for SP500, Nasdaq, FTSEMIB
@@ -200,7 +239,7 @@ st.header("")
 col1, col2, col3 = st.columns(3)    #form avoid to re-run the script automatically everytime the user change an input value. 
         
 with col1:
-    market = st.selectbox("Which market index are you interested in?", ('S&P500', 'NASDAQ', 'FTSEMIB', "Indexes' composites") )
+    market = st.selectbox("Which market index are you interested in?", ('S&P500', 'NASDAQ', 'FTSEMIB') )
     st.write('You selected:', market)
     if market == 'NASDAQ':
         tickers = ticks_NASDAQ #return and assign all the companies listed in the nasdaq
@@ -208,8 +247,6 @@ with col1:
         tickers = ticks_FTSE #companies listed in the dowjones
     elif market == 'S&P500':
         tickers = ticks_SP500 #companies listed in the sp500
-    else:
-        tickers = index_composites
     
 with col2:
     name = st.selectbox('Which stock are you interested in?', list(tickers.keys()))  
