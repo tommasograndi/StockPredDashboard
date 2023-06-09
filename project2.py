@@ -232,7 +232,7 @@ ticks_NASDAQ = dict(zip(NASDAQ['Company'], NASDAQ['Ticker']))
 
 ### Config page layout
 st.set_page_config(page_icon = "", layout="wide", initial_sidebar_state="auto", menu_items=None)
-st.title("Stock analysis, price prediction and portfolio optimization Dashboard")
+st.title("Stock analysis and price prediction Dashboard")
 st.header("")
 
 ### First row 
