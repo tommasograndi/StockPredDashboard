@@ -24,12 +24,42 @@
 
     streamlit run dashboard.py
 
- and wait for the browser to open a new page. <br> <br> <br>
+ and wait for the browser to open a new page. 
  
  ### Dashboard previews and main functionalities
+ 
+ The dashboard is organized in the following way: 
 
- 
- 
- 
+1. **User input** <br>
+First, we have two selectboxes and one textbox in which we can choose between 3 markets () and pick a stock in the list of stocks traded in the selected market (we can also write the name of the stock and search for it). <br>
+After choosing the stock, on the right side there is an input textbox in which we can put the initial date from which we want to download the data.<br>
+Every time the user interact with this upper boxes will change the inpput parameters for all the functions that download the data to be fed to the rest of the script and to the following functions that display the informations and calculate the predictions. 
 
+<img width="1589" alt="image" src="https://github.com/tommasograndi/StockPredOptDashboard/assets/118896276/663e4b2d-2915-468d-a5b9-da1de3706745">
+<br> 
+
+2. **Content output**  <br>
+After the user has interacted with the input boxes, the script will execute the functions and will display the following informations:
+
+   - *Price chart*. This tab will show the Company stock price plot and below the downloaded data. The user can interact with the chart thanks to the `plotly` renderer. 
+      ![Screen Recording 2023-06-09 at 15 18 33](https://github.com/tommasograndi/StockPredOptDashboard/assets/118896276/fe1e562e-b3c2-47ad-bf85-36f17c68ac33)
+   <br>
+
+   - *Technical analysis*. This tab will display the original stock price with some technical indicators plotted along with it. The three technical indicators are Simple Moving Average, Exponential Moving Average and RSI (that is plotted in a separate figure).
+     <img width="1595" alt="image" src="https://github.com/tommasograndi/StockPredOptDashboard/assets/118896276/4fcc5632-706b-4979-93ee-b200963e353a">
+   <br>
+
+   - *Prediction*. This is the most important tab of the dashboard, the one with the two models studied and created according to the process explained in the `report.ipynb` notebook.  As we know, the two models are ARIMA and XGBOOST. 
+     
+   <br>
+
+   - *Statistics*. This tab simply display some statistics of the stock scrape with `yahoo_fin` package from Yahoo Finance. 
+     <img width="552" alt="image" src="https://github.com/tommasograndi/StockPredOptDashboard/assets/118896276/67e806a2-de85-499a-ab1a-bc8d77f8cbbf">
+     <br>
+
+   - *Analysts' estimates*. As the previous tab, this one is printing analysts predictions and forecast for the company main figures. The informations are obtained through a `yahoo_fin` function. 
+   
+
+
+<br> <br> <br>
  _For more informations about the library Streamlit you can check the documentation at https://docs.streamlit.io_
