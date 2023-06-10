@@ -211,7 +211,6 @@ def apply_indicator(indicator, data, window):
 
 
 ### Initialise S&P500, Nasdaq, Dow-Jones, FTSEMIB list of companies
-index_composites = {'SP500' : '^GSPC', 'FTSEMIB' : 'FTSEMIB.MI', 'NASDAQ' : '^IXIC'}
 
 # Get tickers for SP500, Nasdaq, FTSEMIB
 SP500 = pd.read_html("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies")
@@ -236,7 +235,7 @@ st.title("Stock analysis and price prediction Dashboard")
 st.header("")
 
 ### First row 
-col1, col2, col3 = st.columns(3)    #form avoid to re-run the script automatically everytime the user change an input value. 
+col1, col2, col3 = st.columns(3)   #create three horizontal columns for three different input boxes
         
 with col1:
     market = st.selectbox("Which market index are you interested in?", ('S&P500', 'NASDAQ', 'FTSEMIB') )
@@ -269,11 +268,13 @@ with col22:
     st.caption("")   
     st.metric(label = choice + " live stock price", value = "%.2f$" % get_live_price(choice))
 
-### Second row
+### Third row, containing the tabs displaying all the informations and the PREDICTION
 stock_data, stats, analyst_info = get_STOCK_DATA(choice, start_date=date)
 
+# Initialise indicators
 indicators = ['Simple moving average', 'Exponential moving average', 'Relative strength index']
-    
+
+# Create the tabs
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["Chart", "Technical analysis", "Prediction", "Statistics", "Analysts estimates"])
 st.caption("")
 

@@ -1,8 +1,15 @@
 streamlit
 pandas
 yfinance
+yahoo_fin
+numpy
 wikipediaapi
 plotly
 matplotlib
+plotly
 scipy
 TA-lib (https://medium.com/@mkstz/install-ta-lib-without-homebrew-61f57a63c06d) #how to install it
+pandas_market_calendars
+datetime
+pmdarima
+xgboost
