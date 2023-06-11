@@ -8,7 +8,7 @@
  2. Additionally there is a script called `dashboard.py` that contains synthetically the most important parts presented in the notebook, the functions that are used to manipulate the data and the whole interface of the dashboard. This script is the one to be runned by streamlit in order to access the dashboard and interact with it. 
 
  ### Access the dashboard. 
- In order to access the dashboard, is fundamental first to install all the required libraries. See requirements for details.
+ In order to access the dashboard, is fundamental first to install all the required libraries. See `requirements.txt` for details.
  After this, you'll have to activate the Python environment (in my case is called `ITproject`) with the necessary libraries installed. I used Anaconda to create and manage it and I can access it from the terminal with:
  
     conda activate ITproject
