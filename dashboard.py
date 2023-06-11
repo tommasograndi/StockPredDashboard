@@ -362,7 +362,7 @@ with tab3:
                 mode='lines',
                 fillcolor='rgba(68, 68, 68, 0.3)', #color to fill in the area
                 fill='tonexty', #type of filling
-                name = 'Upper bound CI',
+                name = 'Lower bound CI',
                 showlegend=False
                 ), 
                 go.Scatter( #add the Prediction
