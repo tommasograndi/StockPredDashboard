@@ -1,5 +1,7 @@
 ## Financial dashboard for stock selection, analysis and price prediction.
 
+If any error occures while viewing the notebook `report.ipynb` you can view it at https://nbviewer.org/github/tommasograndi/StockPredDashboard/blob/main/Report.ipynb 
+
  ### Structure of the repository
  For the project of the second module of IT coding I chose the Stock Price Prediction, but I also decided to extend this prediction and implement it into a web dashboard that could allow the user to select a stock, visualize informations and request a prediction based on two main models: **ARIMA** and **XGBOOST**. 
 
